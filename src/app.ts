@@ -1,22 +1,26 @@
-import express from 'express';
+import express, { Request } from 'express';
 import { Server } from 'socket.io';
-// import cors from 'cors';
+import { serialize, parse } from "cookie";
+import cors from 'cors';
+import router from './routes/index';
+import cookieParser from 'cookie-parser';
+import { EXPRESS_CORS_SETTING } from './constants';
 
 const app = express();
 
-// app.use(cors({
-//     origin: ['http://localhost:3000', 'https://270zvh4l-3000.asse.devtunnels.ms'],
-//     methods: ["GET", "POST"],
-//     credentials: true,
-// }));
-// // app.use(router);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(cors(EXPRESS_CORS_SETTING));
+
+app.use(router);
 
 const server = app.listen(8005, () => { });
 
 const io = new Server(server, {
     cookie: {
         name: 'userID',
-        path: "/socket.io",
+        path: "/",
         httpOnly: true,
         sameSite: "none",
         secure: true
@@ -28,22 +32,34 @@ const io = new Server(server, {
     }
 });
 
+io.engine.on("initial_headers", (headers, request) => {
+    const cookies = parse(request.headers.cookie || '');
+
+    if(cookies.userID){
+        headers["set-cookie"] = [serialize("userID", cookies.userID, { sameSite: "none", secure: true, httpOnly: true, path: "/"})];
+    }
+});
+
 io.on('connection', (socket) => {
-    
+    const request = socket.request as Request;
+    const cookies = parse(request.headers.cookie || '');
+
     console.log('a user connected');
-    console.log('[cookie] : ', socket.request.headers.cookie);
 
     socket.on('disconnect', () => {
         console.log('user disconnected');
     });
-    
+
     socket.on('error', (error) => {
         console.error('[error]]', error);
     });
 
-    socket.on('client', (data) => { // reply라는 이벤트로 송신오면 메세지가 data인수에 담김
-        console.log('[reply]', data);
+    socket.on('join', (data) => {
+        console.log('[방 입장] data: ', data);
+        socket.join(data);
     });
 
-    socket.emit('server', 'Hello Socket.IO'); // news라는 이벤트로 문자열을 포함하여 송신
+    socket.on('place', data => {
+        socket.emit('placed', data);
+    });
 });
