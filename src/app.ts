@@ -1,10 +1,10 @@
-import express, { Request } from 'express';
-import { Server } from 'socket.io';
-import { serialize, parse } from "cookie";
+import express from 'express';
 import cors from 'cors';
-import router from './routes/index';
+import { Server } from 'socket.io';
+import router from './routes/index.js';
 import cookieParser from 'cookie-parser';
-import { EXPRESS_CORS_SETTING } from './constants';
+import { EXPRESS_CORS_SETTING } from './constants.js';
+import InitSocket from './socket.js';
 
 const app = express();
 
@@ -32,34 +32,4 @@ const io = new Server(server, {
     }
 });
 
-io.engine.on("initial_headers", (headers, request) => {
-    const cookies = parse(request.headers.cookie || '');
-
-    if(cookies.userID){
-        headers["set-cookie"] = [serialize("userID", cookies.userID, { sameSite: "none", secure: true, httpOnly: true, path: "/"})];
-    }
-});
-
-io.on('connection', (socket) => {
-    const request = socket.request as Request;
-    const cookies = parse(request.headers.cookie || '');
-
-    console.log('a user connected');
-
-    socket.on('disconnect', () => {
-        console.log('user disconnected');
-    });
-
-    socket.on('error', (error) => {
-        console.error('[error]]', error);
-    });
-
-    socket.on('join', (data) => {
-        console.log('[방 입장] data: ', data);
-        socket.join(data);
-    });
-
-    socket.on('place', data => {
-        socket.emit('placed', data);
-    });
-});
+InitSocket(io);

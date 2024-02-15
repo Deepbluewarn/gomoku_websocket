@@ -1,17 +1,17 @@
 import express from 'express';
-import Redis from 'ioredis';
-import { REDIS_SESSION_SETTING } from '../constants';
+import { customAlphabet } from 'nanoid';
+import { setUserSession } from '../services/redis.js';
 
-const redis = new Redis(REDIS_SESSION_SETTING);
 const router = express.Router();
 
 router.post('/register', (req, res) => {
     const userID = req.cookies.userID;
     const { nickname } = req.body;
+    const inviteCode = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 10)();
 
-    redis.set(userID, nickname);
+    setUserSession(userID, { nickname, inviteCode });
 
-    res.json({message: `${nickname} 님 환영합니다!`});
+    res.json({value: { nickname, inviteCode }});
 });
 
 export default router;
