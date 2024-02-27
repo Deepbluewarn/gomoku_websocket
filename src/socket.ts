@@ -2,12 +2,28 @@ import { Request } from 'express';
 import { Server } from 'socket.io';
 import { Redis } from 'ioredis';
 import { serialize, parse } from "cookie";
-import { IUserSession } from './interfaces/index.js';
-import { REDIS_SESSION_SETTING } from './constants.js';
+import { IUserSession, ROOM_NOT_EXIST, USER_NOT_FOUND } from './interfaces/socket.io.js';
+import { REDIS_SETTING } from './constants.js';
+import { ClientToServerEvents, JOIN, JOINED, PLACE, PLACED, REQUEST_USER_INFO, ROOM_INFO, ServerToClientEvents } from './interfaces/socket.io.js';
+import { roomExist } from './services/redis.js';
 
-const redis = new Redis(REDIS_SESSION_SETTING);
+const redis = new Redis(REDIS_SETTING);
 
-export default function InitSocket(io: Server) {
+
+async function getUserSession(userID: string) {
+    let res: IUserSession;
+    const redis_res = await redis.hget('session', userID);
+
+    if (redis_res === null) {
+        res = { nickname: '' };
+    } else {
+        res = JSON.parse(redis_res);
+    }
+
+    return res;
+}
+
+export default function InitSocket(io: Server<ClientToServerEvents, ServerToClientEvents>) {
     io.engine.on("initial_headers", (headers, request) => {
         const cookies = parse(request.headers.cookie || '');
 
@@ -30,31 +46,64 @@ export default function InitSocket(io: Server) {
             console.error('[error]]', error);
         });
 
-        socket.on('register', async (data) => {
+        socket.on(REQUEST_USER_INFO, async () => {
             const userID = cookies.userID;
-            let res: IUserSession;
+            let res: IUserSession = await getUserSession(userID);
 
-            console.log('[register] userID: ', userID);
+            socket.emit(REQUEST_USER_INFO, res);
+        });
 
-            const redis_res = await redis.get(userID);
+        socket.on(JOIN, async (data) => {
+            const userID = cookies.userID;
+            const res = await getUserSession(userID);
 
-            if (redis_res === null) {
-                res = { nickname: '', inviteCode: '' };
-            } else {
-                res = JSON.parse(redis_res);
+            if(res.nickname === '') {
+                console.log('user not found userID" ', userID)
+                socket.emit(USER_NOT_FOUND);
+
+                return;
             }
 
-            socket.emit('register', { value: res });
+            // POST /create-room 요청에서 생성된 방이 아니면 방이 존재하지 않는다고 알린다.
+            if(await roomExist(data)) socket.emit(ROOM_NOT_EXIST);
+
+            console.log('socket.join', data);
+            await socket.join(data);
         });
 
-        socket.on('join', (data) => {
-            console.log('[방 입장] data: ', data);
-            socket.join(data);
+        socket.on(PLACE, data => {
+            io.to(data.room_id).emit(PLACED, data);
         });
+    });
 
-        socket.on('place', data => {
-            socket.emit('placed', data);
-        });
+    io.of("/").adapter.on("create-room", (room) => {
+        console.log(`room ${room} was created`);
+        
+    });
+
+    io.of("/").adapter.on("join-room", (room, id) => {
+        console.log(`socket ${id} has joined room ${room}`);
+
+        const user_cnt = io.sockets.adapter.rooms.get(room)?.size || 0;
+
+        io.sockets.emit(JOINED, { room_id: room, user_count: user_cnt});
+        io.sockets.emit(ROOM_INFO, { room_id: room, user_count: user_cnt });
+
+        // redis 에서 room 으로 생성된 방의 정보를 업데이트한다.
+        
+    });
+
+    io.of("/").adapter.on("delete-room", (room) => {
+        console.log(`room ${room} was deleted`);
+
+    });
+
+    io.of("/").adapter.on("leave-room", (room, id) => {
+        console.log(`${id} leave from ${room} room`);
+
+        const user_cnt = io.sockets.adapter.rooms.get(room)?.size || 0;
+
+        io.sockets.emit(ROOM_INFO, { room_id: room, user_count: user_cnt });
     });
 }
 

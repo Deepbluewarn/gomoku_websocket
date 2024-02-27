@@ -5,6 +5,7 @@ import router from './routes/index.js';
 import cookieParser from 'cookie-parser';
 import { EXPRESS_CORS_SETTING } from './constants.js';
 import InitSocket from './socket.js';
+import { ClientToServerEvents, ServerToClientEvents } from './interfaces/socket.io.js';
 
 const app = express();
 
@@ -17,7 +18,7 @@ app.use(router);
 
 const server = app.listen(8005, () => { });
 
-const io = new Server(server, {
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
     cookie: {
         name: 'userID',
         path: "/",
