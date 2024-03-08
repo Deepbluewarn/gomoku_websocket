@@ -1,11 +1,11 @@
 import { Request } from 'express';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { Redis } from 'ioredis';
 import { serialize, parse } from "cookie";
-import { IUserSession, ROOM_NOT_EXIST, USER_NOT_FOUND } from './interfaces/socket.io.js';
+import { IUserSession, LEAVED, ROOM_NOT_EXIST, USER_JOINED, USER_LEAVED, USER_NOT_FOUND } from './interfaces/socket.io.js';
 import { REDIS_SETTING } from './constants.js';
 import { ClientToServerEvents, JOIN, JOINED, PLACE, PLACED, REQUEST_USER_INFO, ROOM_INFO, ServerToClientEvents } from './interfaces/socket.io.js';
-import { roomExist } from './services/redis.js';
+import { deleteRoom, joinRoom, leaveRoom, roomExist } from './services/redis.js';
 
 const redis = new Redis(REDIS_SETTING);
 
@@ -15,12 +15,21 @@ async function getUserSession(userID: string) {
     const redis_res = await redis.hget('session', userID);
 
     if (redis_res === null) {
-        res = { nickname: '' };
+        res = { id: '', nickname: '' };
     } else {
         res = JSON.parse(redis_res);
     }
 
     return res;
+}
+
+function getCookies(socket: Socket) {
+    const request = socket.request as Request;
+    return parse(request.headers.cookie || '');
+}
+
+function getSocketById(io: Server, id: string){
+    return io.sockets.sockets.get(id) as Socket;
 }
 
 export default function InitSocket(io: Server<ClientToServerEvents, ServerToClientEvents>) {
@@ -81,29 +90,52 @@ export default function InitSocket(io: Server<ClientToServerEvents, ServerToClie
         
     });
 
-    io.of("/").adapter.on("join-room", (room, id) => {
-        console.log(`socket ${id} has joined room ${room}`);
+    io.of("/").adapter.on("join-room", (room_id, user_id) => {
+        if(user_id === room_id) return;
 
-        const user_cnt = io.sockets.adapter.rooms.get(room)?.size || 0;
+        const cookies = getCookies(getSocketById(io, user_id));
 
-        io.sockets.emit(JOINED, { room_id: room, user_count: user_cnt});
-        io.sockets.emit(ROOM_INFO, { room_id: room, user_count: user_cnt });
+        console.log(`socket ${user_id} has joined room ${room_id}`);
 
         // redis 에서 room 으로 생성된 방의 정보를 업데이트한다.
-        
+        // 일단 redis 에서 room 정보를 가져온 다음
+        // user 가 있으면 실패이므로 방에서 내보낸다.
+
+        joinRoom(room_id, cookies.userID).then(async (room) => {
+            io.sockets.emit(JOINED, { room_id: room_id});
+            io.to(user_id).emit(ROOM_INFO, {
+                room_id: room_id,
+                players: await Promise.all(room.playerIds.map(async (id) => await getUserSession(id))),
+                owner: await getUserSession(room.ownerId),
+                board: room.board,
+                black: room.whoIsBlack === cookies.userID,
+                turn: room.turn === cookies.userID
+            });
+            io.sockets.emit(USER_JOINED, await getUserSession(cookies.userID));
+        }).catch(err => {
+            console.log('join-room event err: ', err);
+            io.socketsLeave(room_id);
+        });
     });
 
     io.of("/").adapter.on("delete-room", (room) => {
         console.log(`room ${room} was deleted`);
-
+        deleteRoom(room);
     });
 
     io.of("/").adapter.on("leave-room", (room, id) => {
+        if(id === room) return;
+
+        const cookies = getCookies(getSocketById(io, id));
+
         console.log(`${id} leave from ${room} room`);
 
-        const user_cnt = io.sockets.adapter.rooms.get(room)?.size || 0;
-
-        io.sockets.emit(ROOM_INFO, { room_id: room, user_count: user_cnt });
+        leaveRoom(room, cookies.userID).then(async () => {
+            io.to(id).emit(LEAVED, { room_id: room });
+            io.sockets.emit(USER_LEAVED, await getUserSession(cookies.userID));
+        }).catch(err => {
+            console.log('leave-room event err: ', err);
+        })
     });
 }
 
