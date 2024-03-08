@@ -1,3 +1,5 @@
+export const BOARD_SIZE = 15;
+
 export const REDIS_SETTING = {
     host: process.env.REDIS_HOST || '',
     port: Number(process.env.REDIS_PORT) || 0,

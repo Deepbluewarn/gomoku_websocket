@@ -5,7 +5,7 @@ import { serialize, parse } from "cookie";
 import { IUserSession, LEAVED, ROOM_NOT_EXIST, USER_JOINED, USER_LEAVED, USER_NOT_FOUND } from './interfaces/socket.io.js';
 import { REDIS_SETTING } from './constants.js';
 import { ClientToServerEvents, JOIN, JOINED, PLACE, PLACED, REQUEST_USER_INFO, ROOM_INFO, ServerToClientEvents } from './interfaces/socket.io.js';
-import { deleteRoom, joinRoom, leaveRoom, roomExist } from './services/redis.js';
+import { deleteRoom, joinRoom, leaveRoom, placeStone, roomExist } from './services/redis.js';
 
 const redis = new Redis(REDIS_SETTING);
 
@@ -81,7 +81,11 @@ export default function InitSocket(io: Server<ClientToServerEvents, ServerToClie
         });
 
         socket.on(PLACE, data => {
-            io.to(data.room_id).emit(PLACED, data);
+            placeStone(data.room_id, data.cell_num).then(() => {
+                io.to(data.room_id).emit(PLACED, data);
+            }).catch(err => {
+                console.log('place event err: ', err);
+            });
         });
     });
 
