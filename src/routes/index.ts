@@ -9,12 +9,12 @@ router.post('/register', (req, res) => {
     const userID = req.cookies.userID;
     const { nickname } = req.body;
     
-    setUserSession(userID, { nickname });
-
     const userSession: IUserSession = {
+        id: userID,
         nickname: nickname
     }
-
+    
+    setUserSession(userID, userSession);
     res.json(userSession);
 });
 
