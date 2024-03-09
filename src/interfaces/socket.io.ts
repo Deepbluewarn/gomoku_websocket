@@ -28,6 +28,8 @@ export const ROOM_INFO = 'room-info';
 export const REQUEST_USER_INFO = 'request-user-info';
 export const USER_NOT_FOUND = 'user-not-found';
 export const ROOM_NOT_EXIST = 'room-not-exist';
+export const GAME_STARTED = 'game-started';
+export const GAME_END = 'game-end';
 
 export interface ServerToClientEvents {
     [JOINED]: (room: ISocketRoom) => void // 누가 참가했는지에 대한 정보를 포함해야 한다.
@@ -43,6 +45,8 @@ export interface ServerToClientEvents {
     [REQUEST_USER_INFO]: (user_session: IUserSession) => void
     [USER_NOT_FOUND] : () => void
     [ROOM_NOT_EXIST] : () => void
+    [GAME_STARTED] : () => void
+    [GAME_END] : () => void
 }
 
 export interface ClientToServerEvents {
