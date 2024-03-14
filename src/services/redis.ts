@@ -22,6 +22,7 @@ export async function createRoom(roomID: string, roomName: string, userID: strin
         whoIsBlack: userID,
         board: createBoard(BOARD_SIZE),
         turn: userID,
+        status: 'waiting',
     }
     await redis.hset('room', roomID, JSON.stringify(room));
 }
