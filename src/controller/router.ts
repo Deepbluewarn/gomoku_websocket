@@ -1,5 +1,5 @@
 import express from 'express';
-import { customAlphabet } from 'nanoid';
+import { customAlphabet, nanoid } from 'nanoid';
 import { createRoom, setUserSession } from '../services/redis.js';
 
 export function registerController(req: express.Request, res: express.Response) {
@@ -7,7 +7,7 @@ export function registerController(req: express.Request, res: express.Response) 
     const { nickname } = req.body;
     
     const userSession = {
-        id: userID,
+        id: nanoid(),
         nickname: nickname
     }
     
