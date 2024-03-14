@@ -34,7 +34,11 @@ export async function getRoom(roomID: string) {
         throw new Error('Room not exist');
     }
 
-    return JSON.parse(room);
+    return JSON.parse(room) as IRoom;
+}
+
+export async function setRoom(roomID: string, room: IRoom){
+    await redis.hset('room', roomID, JSON.stringify(room));
 }
 
 export async function joinRoom(roomID: string, userID: string) {
@@ -50,7 +54,7 @@ export async function joinRoom(roomID: string, userID: string) {
 
     console.log(JSON.stringify(roomData));
 
-    await redis.hset('room', roomID, JSON.stringify(roomData));
+    await setRoom(roomID, roomData);
 
     return roomData;
 }
@@ -66,7 +70,7 @@ export async function leaveRoom(roomID: string, userID: string) {
     roomData.playerIds = Array.from(playerIds);
     roomData.spectators = Array.from(spectators);
 
-    await redis.hset('room', roomID, JSON.stringify(roomData));
+    await setRoom(roomID, roomData);
 }
 
 export async function roomExist(roomID: string) {
@@ -98,9 +102,8 @@ function getArrayIndexByCellNum(cellNum: number) {
  * @param roomID Room 의 key 값
  * @param cellNum 1 부터 시작하는 보드의 셀 번호
  */
-export async function placeStone(roomID: string, cellNum: number) {
-    const roomData: IRoom = await getRoom(roomID);
-    const board = roomData.board;
+export async function placeStone(room: IRoom, cellNum: number) {
+    const board = room.board;
 
     const [row, col] = getArrayIndexByCellNum(cellNum);
 
@@ -108,7 +111,7 @@ export async function placeStone(roomID: string, cellNum: number) {
 
     board[row][col] = 1;
 
-    roomData.board = board;
+    room.board = board;
 
-    await redis.hset('room', roomID, JSON.stringify(roomData));
+    return room;
 }
