@@ -1,15 +1,12 @@
 import { Request } from 'express';
-import { serialize, parse } from "cookie";
-import { Server, Socket } from "socket.io";
-import { ClientToServerEvents, IUserSession, JOIN, JOINED, LEAVED, PLACE, PLACED, REQUEST_USER_INFO, ROOM_INFO, ROOM_NOT_EXIST, ServerToClientEvents, USER_JOINED, USER_LEAVED, USER_NOT_FOUND } from "../interfaces/socket.io.js";
+import { parse } from "cookie";
+import { IO, IUserSession, JOIN, JOINED, LEAVED, PLACE, PLACED, REQUEST_USER_INFO, GAME_INFO, ROOM_NOT_EXIST, SOCKET, ServerToClientEvents, TURN, USER_JOINED, USER_LEAVED, USER_NOT_FOUND, GAME_STARTED, Stone } from "../interfaces/socket.io.js";
 import { Redis } from 'ioredis';
 import { REDIS_SETTING } from '../constants.js';
-import { deleteRoom, joinRoom, leaveRoom, placeStone, roomExist } from '../services/redis.js';
+import { deleteRoom, getRoom, joinRoom, leaveRoom, placeStone, roomExist, setRoom } from '../services/redis.js';
+import { IRoom } from '../interfaces/room.js';
 
 const redis = new Redis(REDIS_SETTING);
-
-export type IO = Server<ClientToServerEvents, ServerToClientEvents>;
-export type SOCKET = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 function getSocketById(io: IO, id: string) {
     return io.sockets.sockets.get(id) as SOCKET;
@@ -31,6 +28,14 @@ async function getUserSession(userID: string) {
 const getCookies = (socket: SOCKET) => {
     const request = socket.request as Request;
     return parse(request.headers.cookie || '');
+}
+
+const canStartGame = (room: IRoom, userID: string) => {
+    return room.playerIds.length === 2 && room.whoIsBlack === userID;
+}
+
+const getPlayerStoneColor = (room: IRoom, userID: string) => {
+    return (room.whoIsBlack === userID ? 'black' : 'white') as Stone;
 }
 
 export const handleConnectionEvent = (socket: SOCKET) => {
@@ -71,12 +76,47 @@ export const handleRoomEvent = (io: IO, socket: SOCKET) => {
         await socket.join(data);
     });
 
-    socket.on(PLACE, data => {
-        placeStone(data.room_id, data.cell_num).then(() => {
-            io.to(data.room_id).emit(PLACED, data);
-        }).catch(err => {
+    socket.on(PLACE, async (data) => {
+        const userID = getCookies(socket).userID;
+
+        console.log('place event', data, userID);
+
+        try{
+            const room = await getRoom(data.room_id);
+
+            if(room.status === 'end') return;
+
+            if(room.status === 'waiting' && canStartGame(room, userID)){
+                room.status = 'playing';
+            }
+
+            if(room.status === 'playing'){
+                if(room.turn !== userID) {
+                    console.log('not your turn.', userID);
+                    return;
+                }
+
+                const placedRoom = await placeStone(room, data.cell_num);
+
+                placedRoom.turn = room.playerIds.find(id => id !== userID) as string;
+
+                await setRoom(data.room_id, placedRoom);
+
+                io.to(data.room_id).emit(PLACED, {
+                    ...data,
+                    color: getPlayerStoneColor(placedRoom, userID),
+                    time: new Date().getTime(),
+                });
+
+                io.to(data.room_id).emit(GAME_STARTED);
+
+                const stone = placedRoom.whoIsBlack === userID; // 이 값이 true 이면 백돌 차례. false 이면 흑돌 차례
+
+                io.to(data.room_id).emit(TURN, stone ? 'white' : 'black');
+            }
+        }catch(err){
             console.log('place event err: ', err);
-        });
+        }
     });
 }
 
@@ -98,13 +138,13 @@ export const handleSocketJoinRoomEvent = (room_id: string, user_id: string, io: 
 
     joinRoom(room_id, cookies.userID).then(async (room) => {
         socket.emit(JOINED, { room_id: room_id });
-        socket.emit(ROOM_INFO, {
+        socket.emit(GAME_INFO, {
             room_id: room_id,
             players: await Promise.all(room.playerIds.map(async (id) => await getUserSession(id))),
             owner: await getUserSession(room.ownerId),
             board: room.board,
             black: room.whoIsBlack === cookies.userID,
-            turn: room.turn === cookies.userID
+            status: room.status,
         });
         io.to(room_id).emit(USER_JOINED, await getUserSession(cookies.userID));
     }).catch(err => {
