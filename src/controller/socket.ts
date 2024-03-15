@@ -159,7 +159,7 @@ export const handleSocketDeleteRoomEvent = (room: string) => {
     deleteRoom(room);
 }
 
-export const handleSocketLeaveRoomEvent = (room_id: string, user_id: string, io: IO) => {
+export const handleSocketLeaveRoomEvent = async (room_id: string, user_id: string, io: IO) => {
     if (user_id === room_id) return;
 
     const socket = getSocketById(io, user_id);
@@ -167,10 +167,9 @@ export const handleSocketLeaveRoomEvent = (room_id: string, user_id: string, io:
 
     console.log(`${user_id} leave from ${room_id} room`);
 
-    leaveRoom(room_id, cookies.userID).then(async () => {
-        socket.emit(LEAVED, { room_id });
-        io.to(room_id).emit(USER_LEAVED, await getUserSession(cookies.userID));
-    }).catch(err => {
-        console.log('leave-room event err: ', err);
-    });
+    // 여기서 leaveRoom 을 실행하지 않고, 방에서 나갔다는 것만 알린다.
+    // 프론트에서는 연결 끊어짐으로 표현한다.
+
+    socket.emit(LEAVED, { room_id });
+    io.to(room_id).emit(USER_LEAVED, await getUserSession(cookies.userID));
 }
