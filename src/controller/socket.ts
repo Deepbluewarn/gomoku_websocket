@@ -145,6 +145,7 @@ export const handleSocketJoinRoomEvent = (room_id: string, user_id: string, io: 
             board: room.board,
             black: room.whoIsBlack === cookies.userID,
             status: room.status,
+            turn: room.turn === cookies.userID,
         });
         io.to(room_id).emit(USER_JOINED, await getUserSession(cookies.userID));
     }).catch(err => {

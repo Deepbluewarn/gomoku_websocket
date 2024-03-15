@@ -20,6 +20,7 @@ interface ISocketGame extends ISocketRoom {
     board: number[][]; // 현재까지 진행된 게임의 상황을 표현한다.
     black: boolean;
     status: GameStatus;
+    turn: boolean;
 }
 interface IPlacement {
     room_id: string;
