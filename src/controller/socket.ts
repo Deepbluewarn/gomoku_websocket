@@ -95,8 +95,8 @@ export const handleRoomEvent = (io: IO, socket: SOCKET) => {
                     console.log('not your turn.', userID);
                     return;
                 }
-
-                const placedRoom = await placeStone(room, data.cell_num);
+                const stoneColor = getPlayerStoneColor(room, userID);
+                const placedRoom = await placeStone(room, data.cell_num, stoneColor);
 
                 placedRoom.turn = room.playerIds.find(id => id !== userID) as string;
 
@@ -104,7 +104,7 @@ export const handleRoomEvent = (io: IO, socket: SOCKET) => {
 
                 io.to(data.room_id).emit(PLACED, {
                     ...data,
-                    color: getPlayerStoneColor(placedRoom, userID),
+                    color: stoneColor,
                     time: new Date().getTime(),
                 });
 
