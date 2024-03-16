@@ -1,9 +1,10 @@
 import { Server, Socket } from "socket.io";
+import { IStone } from "./game.js";
 
 export type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 export type SOCKET = Socket<ClientToServerEvents, ServerToClientEvents>;
 export type GameStatus = 'waiting' | 'playing' | 'end';
-export type Stone = 'black' | 'white';
+export type Stone = 'none' | 'black' | 'white';
 
 export interface IUserSession {
     id: string;
@@ -17,7 +18,7 @@ interface ISocketRoom {
 interface ISocketGame extends ISocketRoom {
     players: IUserSession[];
     owner: IUserSession;
-    board: number[][]; // 현재까지 진행된 게임의 상황을 표현한다.
+    board: IStone[]; // 현재까지 진행된 게임의 상황을 표현한다.
     black: boolean;
     status: GameStatus;
     turn: boolean;

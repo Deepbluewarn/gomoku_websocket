@@ -1,8 +1,7 @@
-import { BOARD_SIZE, REDIS_SETTING } from "../constants.js";
+import { REDIS_SETTING } from "../constants.js";
 import { IRoom } from "../interfaces/room.js";
-import { IUserSession } from "../interfaces/socket.io.js";
+import { IUserSession, Stone } from "../interfaces/socket.io.js";
 import { Redis } from 'ioredis';
-import { createBoard } from "./board.js";
 
 const redis = new Redis(REDIS_SETTING);
 
@@ -20,7 +19,7 @@ export async function createRoom(roomID: string, roomName: string, userID: strin
         playerIds: [userID],
         spectators: [],
         whoIsBlack: userID,
-        board: createBoard(BOARD_SIZE),
+        board: [],
         turn: userID,
         status: 'waiting',
     }
@@ -45,9 +44,6 @@ export async function joinRoom(roomID: string, userID: string) {
     const roomData: IRoom = await getRoom(roomID);
 
     const playerIds = new Set(roomData.playerIds);
-
-    if(playerIds.size >= 2) throw new Error('Room is full');
-
     playerIds.add(userID);
 
     roomData.playerIds = Array.from(playerIds);
@@ -83,33 +79,21 @@ export async function deleteRoom(roomID: string) {
 
 /** Board */
 
-function getArrayIndexByCellNum(cellNum: number) {
-    let row = Math.floor(cellNum / BOARD_SIZE);
-    let col = cellNum % BOARD_SIZE;
-
-    if(col === 0) {
-        --row;
-        col = BOARD_SIZE - 1;
-    }else if(col > 0) {
-        --col;
-    }
-
-    return [row, col];
-}
-
 /**
  * 
  * @param roomID Room 의 key 값
  * @param cellNum 1 부터 시작하는 보드의 셀 번호
  */
-export async function placeStone(room: IRoom, cellNum: number) {
+export async function placeStone(room: IRoom, cellNum: number, stone: Stone) {
     const board = room.board;
 
-    const [row, col] = getArrayIndexByCellNum(cellNum);
+    const stoneExist = board.some((stone, i) => {
+        return stone.cellNum === cellNum;
+    })
 
-    if(board[row][col] !== 0) throw new Error('Cell already occupied');
+    if(stoneExist) throw new Error('Cell already occupied');
 
-    board[row][col] = 1;
+    board.push({ cellNum, color: stone });
 
     room.board = board;
 
